@@ -1,0 +1,86 @@
+---
+#
+# usage: ansible-playbook base-image.yaml -e target=<hostname>
+#
+- hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Download virt-utils
+      git:
+        repo: "https://github.com/meffie/virt-utils.git"
+        dest: /tmp/virt-utils
+        version: virt-run
+
+    - name: Install virt-utils
+      become: true
+      make:
+        target: install
+        chdir: /tmp/virt-utils
+
+    - name: Download kvm-install-vm
+      git:
+        repo: "https://github.com/giovtorres/kvm-install-vm.git"
+        dest: /tmp/kvm-install-vm
+        version: master
+
+    - name: Install kvm-install-vm script
+      become: true
+      copy:
+        remote_src: true
+        src: /tmp/kvm-install-vm/kvm-install-vm
+        dest: /usr/local/bin/kvm-install-vm
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create base guest
+      command: >
+        /usr/local/bin/kvm-install-vm create
+        -n
+        -b vlbr0
+        -c 1
+        -d 20
+        -D example.com
+        -k /home/mmeffie/.ssh/mmeffie-sna2.pub
+        -l /home/mmeffie/virt/images
+        -L /home/mmeffie/virt/vms
+        -m 1024
+        -t ubuntu1804
+        template
+
+    - add_host:
+        #name: "{{ target }}"
+        name: template.example.com
+        groups: target_group
+      changed_when: false
+
+
+- hosts: target_group
+  become: true
+  tasks:
+    - name: Install packages
+      apt:
+        update_cache: true
+        name:
+          - git
+          - python3-pip
+
+    - name: Install afsutil
+      pip:
+        name: afsutil
+
+    - name: Download virt-utils
+      git:
+        repo: "https://github.com/meffie/virt-utils.git"
+        dest: /tmp/virt-utils
+        version: virt-run
+
+    - name: Install the kernel-ppa script
+      copy:
+        remote_src: true
+        src: /tmp/virt-utils/kernel-ppa
+        dest: /usr/local/bin/kernel-ppa
+        owner: root
+        group: root
+        mode: "0755"
